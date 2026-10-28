@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+_MEI*/
+*.spec
+# Release binaries are NOT committed: the exe ships via GitHub Releases.
+BINARY/
+*.exe
+# Test images (created while trying things out).
+*.img
+*.iso
+# Unfinished C# port (local only, not part of the release).
+dotnet/
+# Local environment (never commit).
+.venv/
+venv/
+.agents/
+.muse/
+.hg/
+.sl/
+.eden/
