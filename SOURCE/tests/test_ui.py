@@ -259,6 +259,33 @@ class TestUiLogic(unittest.TestCase):
         finally:
             app.destroy()
 
+    def test_browse_source_resets_output(self):
+        from unittest import mock
+        try:
+            app = ui.App()
+        except Exception as e:
+            raise unittest.SkipTest(f"no display: {e}")
+        try:
+            app.withdraw()
+            with tempfile.TemporaryDirectory() as tmp:
+                src1 = os.path.join(tmp, "one")
+                src2 = os.path.join(tmp, "two")
+                os.makedirs(src1)
+                os.makedirs(src2)
+                with mock.patch.object(ui.filedialog, "askdirectory",
+                                       return_value=src1):
+                    app._browse_source()
+                self.assertEqual(app.source_var.get(), src1)
+                self.assertTrue(app.output_var.get().endswith("one.img"))
+                app.output_var.set(os.path.join(tmp, "custom.img"))
+                with mock.patch.object(ui.filedialog, "askdirectory",
+                                       return_value=src2):
+                    app._browse_source()
+                self.assertEqual(app.source_var.get(), src2)
+                self.assertTrue(app.output_var.get().endswith("two.img"))
+        finally:
+            app.destroy()
+
     def test_build_bad_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(Exception):

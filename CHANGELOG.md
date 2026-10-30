@@ -4,6 +4,19 @@
 
 ## Deutsch
 
+### v1.1 — 30.10.2026
+
+- Behoben: Absturz beim Droppen aufs Fenster (Drops werden jetzt per
+  Polling abgeholt statt per UI-Callback aus der Fensternachricht).
+- Behoben: Bei jeder neuen Quellwahl wird der Ausgabe-Vorschlag jetzt
+  aktualisiert (zuvor nur bei leerem Ausgabefeld).
+- Neu: Visual-Studio-Projekt (`disc_create.sln` / `disc_create.pyproj`)
+  zum Öffnen, Debuggen und Testen.
+- Robuster: Drag-&-Drop ignoriert unerwartete Systemantworten
+  (statt abzustürzen) und prüft Drop-Handles vorab; die Drop-Kette
+  wird per simulierter WM_DROPFILES-Nachricht getestet.
+- Test-Suite: 49 Tests.
+
 ### v1.0 — 28.10.2026
 
 Erste Veröffentlichung.
@@ -25,6 +38,19 @@ Erste Veröffentlichung.
   Pfadtabellen, Namens-Mangling, UI-Logik, Config, Kontextmenü, i18n.
 
 ## English
+
+### v1.1 — 2026-10-30
+
+- Fixed: crash when dropping onto the window (drops are now collected
+  by polling instead of a UI callback from the window procedure).
+- Fixed: picking a new source now always refreshes the suggested output
+  (previously only when the output field was empty).
+- New: Visual Studio project (`disc_create.sln` / `disc_create.pyproj`)
+  for opening, debugging, and testing.
+- Hardened: drag & drop ignores unexpected system responses instead
+  of crashing, and validates drop handles up front; the drop chain is
+  tested with a synthetic WM_DROPFILES message.
+- Test suite: 49 tests.
 
 ### v1.0 — 2026-10-28
 

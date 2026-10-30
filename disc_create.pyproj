@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{2E04CE2A-998D-4CFD-A131-3B7FAC3B2ADE}</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>SOURCE\ui.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>SOURCE\</WorkingDirectory>
+    <OutputPath>SOURCE\</OutputPath>
+    <Name>disc_create</Name>
+    <RootNamespace>disc_create</RootNamespace>
+    <TestFramework>Pytest</TestFramework>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <ItemGroup>
+    <Compile Include="SOURCE\config.py" />
+    <Compile Include="SOURCE\contextmenu.py" />
+    <Compile Include="SOURCE\dnd.py" />
+    <Compile Include="SOURCE\lang.py" />
+    <Compile Include="SOURCE\make_floppy.py" />
+    <Compile Include="SOURCE\make_iso.py" />
+    <Compile Include="SOURCE\ui.py" />
+    <Compile Include="SOURCE\tests\fakewinreg.py" />
+    <Compile Include="SOURCE\tests\test_config.py" />
+    <Compile Include="SOURCE\tests\test_contextmenu.py" />
+    <Compile Include="SOURCE\tests\test_dnd.py" />
+    <Compile Include="SOURCE\tests\test_lang.py" />
+    <Compile Include="SOURCE\tests\test_make_floppy.py" />
+    <Compile Include="SOURCE\tests\test_make_iso.py" />
+    <Compile Include="SOURCE\tests\test_ui.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="README.md" />
+    <Content Include="CHANGELOG.md" />
+    <Content Include="LICENSE" />
+    <Content Include="release.bat" />
+    <Content Include="SOURCE\build_exe.bat" />
+    <Content Include="SOURCE\README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="SOURCE\tests\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

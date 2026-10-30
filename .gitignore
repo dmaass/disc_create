@@ -13,6 +13,9 @@ BINARY/
 *.iso
 # Unfinished C# port (local only, not part of the release).
 dotnet/
+# Visual Studio (solution + project are committed, user state is not).
+.vs/
+*.user
 # Local environment (never commit).
 .venv/
 venv/

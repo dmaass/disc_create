@@ -400,15 +400,14 @@ class App(tk.Tk):
 
     # -- file dialogs ------------------------------------------------------
     def _browse_source(self) -> None:
-        """Pick the source folder; suggest an output name when empty."""
+        """Pick the source folder; always re-suggest the output name."""
         path = filedialog.askdirectory(title=lang.t("dlg_source_title"))
         if not path:
             return
         self.source_var.set(path)
-        if not self.output_var.get().strip():
-            self.output_var.set(
-                suggest_output(path, self.format_var.get(),
-                               self.outdir_var.get().strip() or None))
+        self.output_var.set(
+            suggest_output(path, self.format_var.get(),
+                           self.outdir_var.get().strip() or None))
 
     def _browse_output(self) -> None:
         """Pick an explicit output file (overrides any suggestion)."""
@@ -559,13 +558,19 @@ class App(tk.Tk):
                            err_buf.getvalue()))
 
     def _poll_jobs(self) -> None:
-        """Drain finished jobs every 100ms via _finish_job (self-rescheduling)."""
+        """Drain finished jobs and file drops every 100ms (self-rescheduling).
+
+        Drops must be collected here, on the normal event loop: the
+        window procedure runs with the GIL released and may not touch
+        tkinter (see dnd.py).
+        """
         try:
             while True:
                 job = self.jobs.get_nowait()
                 self._finish_job(job)
         except queue.Empty:
             pass
+        dnd.poll()
         self.after(100, self._poll_jobs)
 
     def _finish_job(self, job: tuple) -> None:

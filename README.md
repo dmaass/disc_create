@@ -1,6 +1,6 @@
 [Deutsch](#deutsch) | [English](#english)
 
-# disc_create v1.0
+# disc_create v1.1
 
 ## Deutsch
 
@@ -19,9 +19,11 @@ Abhängigkeiten — reine Python-Standardbibliothek.
 - `BINARY/` — `disc_create.exe`: UI per Doppelklick für 64-Bit-Windows,
   kein Python nötig. **Nicht in Git** — Release-Archive enthalten sie,
   und sie wird als GitHub-Release-Asset veröffentlicht.
+- `disc_create.sln` / `disc_create.pyproj` — Visual-Studio-Projekt
+  (Python-Workload) zum Öffnen, Debuggen und Testen.
 - `LICENSE`, `CHANGELOG.md`
 
-Veröffentlicht am 28.10.2026. Die Release-Exe ist aus dem `SOURCE/`-
+Veröffentlicht am 30.10.2026. Die Release-Exe ist aus dem `SOURCE/`-
 Snapshot in diesem Paket gebaut (PyInstaller-Einzeldatei-Build).
 
 ### Schnellstart (ohne Python)
@@ -46,7 +48,7 @@ python SOURCE\make_iso.py big disk.iso           :: dasselbe, direktes Werkzeug
 python SOURCE\make_floppy.py disk.img --list     :: inspizieren (erkennt Typ automatisch)
 ```
 
-Tests ausführen (47 Tests, keine Abhängigkeiten):
+Tests ausführen (49 Tests, keine Abhängigkeiten):
 
 ```bat
 cd SOURCE
@@ -84,7 +86,9 @@ build_exe.bat
 ```
 
 Braucht Python und einmal `pip install pyinstaller` (das erledigt das
-Skript). Ergebnis landet in `SOURCE\dist\disc_create.exe`.
+Skript). Ergebnis landet in `SOURCE\dist\disc_create.exe`. Für ein
+komplettes Release-Paket (Exe + Doku als ZIP) `release.bat` im
+Wurzelverzeichnis ausführen.
 
 ### Credits
 
@@ -112,9 +116,11 @@ directly in PCem: 1.44MB FAT12 floppies (`.img`) or ISO 9660 CD-ROMs
 - `BINARY/` — `disc_create.exe`: double-click UI for 64-bit Windows,
   no Python needed. **Not tracked in git** — release archives carry
   it, and it is published as a GitHub Release asset.
+- `disc_create.sln` / `disc_create.pyproj` — Visual Studio project
+  (Python workload) for opening, debugging, and testing.
 - `LICENSE`, `CHANGELOG.md`
 
-Released 2026-10-28. The release exe is built from the `SOURCE/`
+Released 2026-10-30. The release exe is built from the `SOURCE/`
 snapshot in this package (PyInstaller one-file build).
 
 ### Quick start (no Python)
@@ -137,7 +143,7 @@ python SOURCE\make_iso.py big disk.iso           :: same, direct tool
 python SOURCE\make_floppy.py disk.img --list     :: inspect (auto-detects type)
 ```
 
-Run the tests (47 tests, no dependencies):
+Run the tests (49 tests, no dependencies):
 
 ```bat
 cd SOURCE
@@ -172,7 +178,8 @@ build_exe.bat
 ```
 
 Needs Python and one `pip install pyinstaller` (the script does that).
-Output lands in `SOURCE\dist\disc_create.exe`.
+Output lands in `SOURCE\dist\disc_create.exe`. For a full release
+package (exe + docs as ZIP), run `release.bat` from the root.
 
 ### Credits
 
