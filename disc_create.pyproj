@@ -24,6 +24,7 @@
     <Compile Include="SOURCE\make_floppy.py" />
     <Compile Include="SOURCE\make_iso.py" />
     <Compile Include="SOURCE\ui.py" />
+    <Compile Include="SOURCE\vhd.py" />
     <Compile Include="SOURCE\tests\fakewinreg.py" />
     <Compile Include="SOURCE\tests\test_config.py" />
     <Compile Include="SOURCE\tests\test_contextmenu.py" />
@@ -32,6 +33,7 @@
     <Compile Include="SOURCE\tests\test_make_floppy.py" />
     <Compile Include="SOURCE\tests\test_make_iso.py" />
     <Compile Include="SOURCE\tests\test_ui.py" />
+    <Compile Include="SOURCE\tests\test_vhd.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="README.md" />

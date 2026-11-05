@@ -4,6 +4,21 @@
 
 ## Deutsch
 
+### v1.2 — 05.11.2026
+
+- Neu: „Abbild bereitstellen" bindet ISOs direkt bzw.
+  Diskettenabbilder (360/720 KB, 1,2/1,44/2,88 MB) über einen
+  temporären
+  VHD-Wrapper als Laufwerk ein und öffnet es im Explorer (nur
+  Windows, Admin-Bestätigung erforderlich); getrennt wird per
+  Auswerfen im Explorer.
+- Der Programmstart räumt eigene alte Temp-Dateien (VHD-Wrapper)
+  weg.
+- Bereitstellen: Laufwerk wird nötigenfalls online geschaltet und
+  bekommt zuverlässig einen Buchstaben (eindeutige Disk-Signatur
+  je Wrapper, echte Wiederholung der Abfrage).
+- Test-Suite: 69 Tests.
+
 ### v1.1 — 30.10.2026
 
 - Behoben: Absturz beim Droppen aufs Fenster (Drops werden jetzt per
@@ -38,6 +53,18 @@ Erste Veröffentlichung.
   Pfadtabellen, Namens-Mangling, UI-Logik, Config, Kontextmenü, i18n.
 
 ## English
+
+### v1.2 — 2026-11-05
+
+- New: "Mount image" mounts ISOs directly, or floppy images
+  (360K/720K/1.2M/1.44M/2.88M) via a temporary VHD wrapper, as
+  a drive
+  and opens it in Explorer (Windows only, admin approval required);
+  unmount by ejecting the drive in Explorer.
+- Startup cleans up our old temp files (VHD wrappers).
+- Mounting: the drive is brought online if needed and reliably gets
+  a letter (unique disk signature per wrapper, real query retries).
+- Test suite: 69 tests.
 
 ### v1.1 — 2026-10-30
 

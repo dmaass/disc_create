@@ -70,6 +70,21 @@ STRINGS = {
         "log_wrote": "{path} geschrieben ({size} Bytes)",
         "log_error": "Fehler: {detail}",
         "log_drop_ignored": "Ignoriert (kein Ordner/Abbild): {path}",
+        "btn_mount": "Abbild bereitstellen...",
+        "dlg_mount_title": "Abbild zum Bereitstellen wählen",
+        "log_mounted": ("Als {letter} bereitgestellt: {path} "
+                        "(zum Trennen in Explorer auswerfen)"),
+        "log_mounted_unknown": ("Bereitgestellt: {path} "
+                                "(zum Trennen in Explorer auswerfen)"),
+        "err_mount_platform": ("Bereitstellen wird nur unter Windows "
+                               "unterstützt"),
+        "err_mount_failed": "Bereitstellen fehlgeschlagen: {detail}",
+        "err_not_attached": "Windows hat das Abbild nicht bereitgestellt",
+        "err_uac_declined": "Admin-Bestätigung abgelehnt",
+        "log_mounting": "Binde ein: {path}",
+        "log_uac_note": ("Hinweis: Das Einbinden erfordert eine "
+                         "Admin-Bestätigung (UAC)."),
+        "err_not_image": "Kein Abbild (.img/.iso): {path}",
         "done_title": "Fertig",
         "done_created": "Erstellt:\n{paths}",
         "list_dir": "VERZ ",
@@ -130,6 +145,20 @@ STRINGS = {
         "log_wrote": "wrote {path} ({size} bytes)",
         "log_error": "error: {detail}",
         "log_drop_ignored": "Ignored (not a folder/image): {path}",
+        "btn_mount": "Mount image...",
+        "dlg_mount_title": "Choose image to mount",
+        "log_mounted": ("Mounted as {letter}: {path} "
+                        "(eject in Explorer to unmount)"),
+        "log_mounted_unknown": ("Mounted: {path} "
+                                "(eject in Explorer to unmount)"),
+        "err_mount_platform": "Mounting is only supported on Windows",
+        "err_mount_failed": "Failed to mount: {detail}",
+        "err_not_attached": "Windows did not attach the image",
+        "err_uac_declined": "Admin approval declined",
+        "log_mounting": "Mounting: {path}",
+        "log_uac_note": ("Note: mounting requires admin approval "
+                         "(UAC)."),
+        "err_not_image": "Not an image (.img/.iso): {path}",
         "done_title": "Done",
         "done_created": "Created:\n{paths}",
         "list_dir": "DIR ",

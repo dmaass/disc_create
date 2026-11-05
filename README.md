@@ -1,6 +1,6 @@
 [Deutsch](#deutsch) | [English](#english)
 
-# disc_create v1.1
+# disc_create v1.2
 
 ## Deutsch
 
@@ -23,7 +23,7 @@ Abhängigkeiten — reine Python-Standardbibliothek.
   (Python-Workload) zum Öffnen, Debuggen und Testen.
 - `LICENSE`, `CHANGELOG.md`
 
-Veröffentlicht am 30.10.2026. Die Release-Exe ist aus dem `SOURCE/`-
+Veröffentlicht am 03.11.2026. Die Release-Exe ist aus dem `SOURCE/`-
 Snapshot in diesem Paket gebaut (PyInstaller-Einzeldatei-Build).
 
 ### Schnellstart (ohne Python)
@@ -35,7 +35,14 @@ Snapshot in diesem Paket gebaut (PyInstaller-Einzeldatei-Build).
 2. Quellordner wählen (oder einen aufs Fenster ziehen), Diskette /
    mehrteilig / ISO wählen, **Abbild erstellen** klicken. **Abbild
    auflisten** inspiziert beliebige `.img`/`.iso` (oder ein Abbild aufs
-   Fenster ziehen).
+   Fenster ziehen). **Abbild bereitstellen** bindet ein ISO direkt
+   bzw. ein Diskettenabbild (360/720 KB, 1,2/1,44/2,88 MB) über
+   einen
+   temporären VHD-Wrapper als Laufwerk ein und öffnet es im Explorer
+   (nur Windows, Admin-Bestätigung erforderlich); getrennt wird
+   per Auswerfen im Explorer. Hinweis: Änderungen am gemounteten
+   Laufwerk gehen dabei verloren — das Original-Image bleibt
+   unverändert.
 
 ### Schnellstart (Python 3.10+)
 
@@ -48,7 +55,7 @@ python SOURCE\make_iso.py big disk.iso           :: dasselbe, direktes Werkzeug
 python SOURCE\make_floppy.py disk.img --list     :: inspizieren (erkennt Typ automatisch)
 ```
 
-Tests ausführen (49 Tests, keine Abhängigkeiten):
+Tests ausführen (69 Tests, keine Abhängigkeiten):
 
 ```bat
 cd SOURCE
@@ -120,7 +127,7 @@ directly in PCem: 1.44MB FAT12 floppies (`.img`) or ISO 9660 CD-ROMs
   (Python workload) for opening, debugging, and testing.
 - `LICENSE`, `CHANGELOG.md`
 
-Released 2026-10-30. The release exe is built from the `SOURCE/`
+Released 2026-11-03. The release exe is built from the `SOURCE/`
 snapshot in this package (PyInstaller one-file build).
 
 ### Quick start (no Python)
@@ -131,6 +138,12 @@ snapshot in this package (PyInstaller one-file build).
 2. Pick a source folder (or drop one onto the window), choose
    floppy / multi-volume / ISO, click **Create image**. **List image**
    inspects any `.img`/`.iso` (or drop an image onto the window).
+   **Mount image** mounts an ISO directly, or a floppy image
+   (360K/720K/1.2M/1.44M/2.88M) via a temporary VHD wrapper, as a
+   drive
+   and opens it in Explorer (Windows only, admin approval required);
+   unmount by ejecting the drive in Explorer. Note: changes made to
+   the mounted drive are lost — the original image stays untouched.
 
 ### Quick start (Python 3.10+)
 
@@ -143,7 +156,7 @@ python SOURCE\make_iso.py big disk.iso           :: same, direct tool
 python SOURCE\make_floppy.py disk.img --list     :: inspect (auto-detects type)
 ```
 
-Run the tests (49 tests, no dependencies):
+Run the tests (69 tests, no dependencies):
 
 ```bat
 cd SOURCE

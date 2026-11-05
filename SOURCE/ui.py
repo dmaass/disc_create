@@ -22,8 +22,11 @@ import contextlib
 import io
 import os
 import queue
+import subprocess
 import sys
+import tempfile
 import threading
+import time
 import tkinter as tk
 import traceback
 import webbrowser
@@ -35,6 +38,7 @@ import dnd
 import lang
 import make_floppy
 import make_iso
+import vhd
 
 #: Format ids with their lang.py label keys.
 FORMATS = (
@@ -185,6 +189,234 @@ def list_image_text(path: str) -> str:
     return "\n".join(lines) if lines else lang.t("list_empty")
 
 
+def mount_target(path: str) -> str:
+    """How to mount *path*: "iso", "floppy" (via VHD wrapper), "error"."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".iso":
+        return "iso"
+    if ext == ".img":
+        return "floppy"
+    return "error"
+
+
+def _ps_query(script: str, tries: int = 6, delay: float = 0.5) -> str:
+    """Run a PowerShell snippet with retries; return stripped stdout.
+
+    The window stays hidden (CREATE_NO_WINDOW). Mounting is
+    asynchronous, hence the retries.
+    """
+    cmd = ["powershell", "-NoProfile", "-Command", script]
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    for _ in range(tries):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True,
+                                 timeout=15, creationflags=flags)
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        if (out.stdout or "").strip():
+            return out.stdout.strip()
+        time.sleep(delay)
+    return ""
+
+
+def _is_attached(path: str) -> bool:
+    """True when Windows reports the image as attached (mounted).
+
+    Waits generously: VHD attach prompts for admin approval (UAC),
+    which may take a while to confirm.
+    """
+    quoted = path.replace("'", "''")
+    return _ps_query(f"(Get-DiskImage -ImagePath '{quoted}').Attached",
+                     tries=60, delay=1.0) == "True"
+
+
+def _mounted_letter(path: str, tries: int = 6,
+                    delay: float = 0.5) -> str | None:
+    """Drive letter ("E:") of the mounted image, or None when undetectable."""
+    quoted = path.replace("'", "''")
+    out = _ps_query(f"(Get-DiskImage -ImagePath '{quoted}' "
+                    "| Get-Volume).DriveLetter", tries, delay)
+    for token in out.split():
+        if len(token) == 1 and token.isalpha():
+            return token.upper() + ":"
+    return None
+
+
+def mount_iso(path: str) -> str | None:
+    """Mount an ISO like an Explorer double-click.
+
+    Returns the drive letter ("E:") or None when undetectable. Raises
+    OSError when Windows does not attach the image. Windows only (the
+    caller checks the platform).
+    """
+    os.startfile(path)  # type: ignore[attr-defined]
+    if not _is_attached(path):
+        raise OSError(lang.t("err_not_attached"))
+    return _mounted_letter(path)
+
+
+def _elevated_args(command: str, result_path: str) -> str:
+    """powershell.exe arguments running *command* elevated.
+
+    *command* must print its result; it is captured into *result_path*
+    since runas output cannot be read directly.
+
+    NOTE: neither *command* nor the wrapper may contain double quotes:
+    they would break the outer -Command "..." wrapping, the elevated
+    shell would die parsing, and no result file would ever appear
+    (hang until timeout). Single-quoted strings only.
+    """
+    rq = result_path.replace("'", "''")
+    inner = (f"$(try {{ {command} }} catch "
+             f"{{ 'ERR:' + $_.Exception.Message }})"
+             f" | Out-File -FilePath '{rq}' -Encoding utf8 -NoNewline")
+    return f"-NoProfile -ExecutionPolicy Bypass -Command \"{inner}\""
+
+
+def _parse_elevated_result(text: str) -> tuple[bool, str]:
+    """Split elevated output into (ok, info). Last OK:/ERR: line wins.
+
+    Cmdlets chat (object dumps), so scan from the end instead of
+    trusting the first line.
+    """
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for ln in reversed(lines):
+        if ln.startswith("OK:"):
+            return True, ln[3:].strip()
+        if ln.startswith("ERR:"):
+            return False, ln[4:].strip() or "unknown error"
+    return False, " ".join(text.split())[:500] or "unknown error"
+
+
+def _run_elevated(command: str, timeout: float = 120.0) -> tuple[bool, str]:
+    """Run a PowerShell *command* elevated; return (ok, info).
+
+    Shows one UAC prompt (none when already admin). Used for VHD
+    attach/detach: the shell verb's implicit elevation is unreliable,
+    an explicit elevated call matches running the app as admin.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    tmp = tempfile.NamedTemporaryFile(prefix="disc_create_el_",
+                                      delete=False)
+    tmp.close()
+    args = _elevated_args(command, tmp.name)
+    try:
+        shell32 = ctypes.windll.shell32
+        shell32.ShellExecuteW.argtypes = [wintypes.HWND, wintypes.LPCWSTR,
+                                          wintypes.LPCWSTR, wintypes.LPCWSTR,
+                                          wintypes.LPCWSTR, ctypes.c_int]
+        shell32.ShellExecuteW.restype = ctypes.c_ssize_t
+        rc = shell32.ShellExecuteW(None, "runas", "powershell.exe",
+                                   args, None, 0)
+        if rc <= 32:
+            if rc == 5:  # SE_ERR_ACCESSDENIED: declined the prompt
+                return False, lang.t("err_uac_declined")
+            return False, f"elevation failed (code {rc})"
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                if os.path.getsize(tmp.name) > 0:
+                    with open(tmp.name, encoding="utf-8-sig",
+                              errors="replace") as f:
+                        return _parse_elevated_result(f.read())
+            except OSError:
+                pass
+            time.sleep(0.5)
+        return False, "timed out waiting for elevation"
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp.name)
+
+
+def mount_floppy(path: str) -> tuple[str, str | None]:
+    """Mount a raw floppy image via a temporary VHD wrapper.
+
+    Returns (vhd_path, drive letter or None). Raises ValueError when the
+    image is not a standard floppy size, OSError on mount failure (the
+    wrapper is removed again then). Needs one UAC confirmation. Windows
+    only (the caller checks the platform).
+    """
+    tmp = tempfile.NamedTemporaryFile(prefix="disc_create_", suffix=".vhd",
+                                      delete=False)
+    tmp.close()
+    try:
+        vhd.wrap_raw_floppy(path, tmp.name)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp.name)
+        raise
+    q = tmp.name.replace("'", "''")
+    # NOTE: plain strings on purpose (no f-string brace doubling) and no
+    # double quotes anywhere (see _elevated_args). The loop polls until a
+    # letter shows up: '' + ... keeps $dl a string because $null -eq ''
+    # is false and would end the loop on the first miss.
+    cmd = (
+        f"Mount-DiskImage -ImagePath '{q}' -ErrorAction Stop | Out-Null; "
+        "$dl = ''; "
+        "for ($i = 0; $i -lt 20 -and $dl -eq ''; $i++) { "
+        "Start-Sleep -Milliseconds 500; "
+        f"$d = Get-DiskImage -ImagePath '{q}' | Get-Disk; "
+        "if ($d -and $d.IsOffline) "
+        "{ try { Set-Disk -Number $d.Number -IsOffline $false } "
+        "catch { } }; "
+        "$p = $d | Get-Partition | Select-Object -First 1; "
+        "$v = $p | Get-Volume; "
+        "if ($v -and -not $v.DriveLetter) { "
+        "$used = @((Get-Partition).DriveLetter) + @('A','B'); "
+        "$free = [char[]](67..90) | Where-Object "
+        "{ $used -notcontains $_ } | Select-Object -First 1; "
+        "if ($free) { try { Set-Partition -DiskNumber $d.Number "
+        "-PartitionNumber $p.PartitionNumber -NewDriveLetter $free } "
+        "catch { }; $v = $p | Get-Volume } }; "
+        "$dl = '' + $v.DriveLetter }; "
+        "'OK:' + $dl")
+    ok, info = _run_elevated(cmd)
+    if not ok:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp.name)
+        raise OSError(info)
+    letter = info.strip().upper()
+    if len(letter) == 1 and letter.isalpha():
+        return tmp.name, letter + ":"
+    return tmp.name, None
+
+
+#: Our temp files: VHD wrappers (prefix + ".vhd") and result files of
+#: elevated calls ("disc_create_el_*" without suffix).
+_TEMP_PREFIX = "disc_create_"
+_TEMP_RESULT_PREFIX = "disc_create_el_"
+_TEMP_VHD_SUFFIX = ".vhd"
+
+
+def cleanup_temp_files() -> int:
+    """Delete our leftover temp files from earlier runs.
+
+    Best effort: a VHD that is still attached is locked by the system,
+    so its deletion fails and it is silently skipped. Returns the
+    number of files removed.
+    """
+    try:
+        tmpdir = tempfile.gettempdir()
+        names = os.listdir(tmpdir)
+    except OSError:
+        return 0
+    removed = 0
+    for name in names:
+        if not name.startswith(_TEMP_PREFIX):
+            continue
+        if not (name.endswith(_TEMP_VHD_SUFFIX)
+                or name.startswith(_TEMP_RESULT_PREFIX)):
+            continue
+        try:
+            os.unlink(os.path.join(tmpdir, name))
+        except OSError:
+            continue
+        removed += 1
+    return removed
+
+
 # ---------------------------------------------------------------------------
 # GUI
 # ---------------------------------------------------------------------------
@@ -295,6 +527,8 @@ class App(tk.Tk):
         self.create_btn.pack(side=tk.LEFT, padx=(8, 4))
         self._btn_list = ttk.Button(btn_frm, command=self._on_list)
         self._btn_list.pack(side=tk.LEFT, padx=4)
+        self._btn_mount = ttk.Button(btn_frm, command=self._on_mount)
+        self._btn_mount.pack(side=tk.LEFT, padx=4)
         self._lang_box = ttk.Combobox(btn_frm, textvariable=self.lang_var,
                                       values=list(lang.LANGS.values()),
                                       state="readonly", width=10)
@@ -355,6 +589,7 @@ class App(tk.Tk):
         self.ctx_remove_btn.configure(text=lang.t("btn_remove"))
         self.create_btn.configure(text=lang.t("btn_create"))
         self._btn_list.configure(text=lang.t("btn_list"))
+        self._btn_mount.configure(text=lang.t("btn_mount"))
         self._log_frame.configure(text=lang.t("log_frame"))
         busy = self.worker is not None and self.worker.is_alive()
         self.status_var.set(lang.t("status_working" if busy
@@ -581,6 +816,26 @@ class App(tk.Tk):
             self._progress["value"] = (100 if total <= 0 else
                                        100 * done / total)
             return
+        if kind == "mounted":
+            _, kind, path, vhd_path, letter = job
+            self._set_busy(False)
+            if letter:
+                self._log(lang.t("log_mounted", path=path, letter=letter))
+                if sys.platform == "win32":
+                    with contextlib.suppress(OSError):
+                        os.startfile(letter + "\\")  # type: ignore[attr-defined]
+            else:
+                self._log(lang.t("log_mounted_unknown", path=path))
+            return
+        if kind == "mount_error":
+            self._set_busy(False)
+            err = job[1]
+            detail = str(err) if isinstance(err, OSError) else "".join(
+                traceback.format_exception_only(err)).strip()
+            self._log(lang.t("log_error", detail=detail))
+            messagebox.showerror(lang.t("err_failed"),
+                                lang.t("err_mount_failed", detail=detail))
+            return
         self._set_busy(False)
         for stream in (job[-2], job[-1]):
             if stream.strip():
@@ -608,6 +863,44 @@ class App(tk.Tk):
         if not path:
             return
         self._show_listing(path)
+
+    def _on_mount(self) -> None:
+        """Mount an image (floppies via a temporary VHD wrapper)."""
+        if sys.platform != "win32":
+            messagebox.showinfo(lang.t("btn_mount"),
+                                lang.t("err_mount_platform"))
+            return
+        path = filedialog.askopenfilename(
+            title=lang.t("dlg_mount_title"),
+            filetypes=[(lang.t("ftype_images"), "*.img *.iso"),
+                       (lang.t("ftype_all"), "*.*")])
+        if not path:
+            return
+        kind = mount_target(path)
+        if kind == "error":
+            messagebox.showerror(lang.t("err_failed"),
+                                lang.t("err_not_image", path=path))
+            return
+        if self.worker is not None and self.worker.is_alive():
+            return
+        self._set_busy(True)
+        self._log(lang.t("log_mounting", path=path))
+        if kind == "floppy":
+            self._log(lang.t("log_uac_note"))
+        self.worker = threading.Thread(target=self._mount_thread,
+                                       args=(kind, path), daemon=True)
+        self.worker.start()
+
+    def _mount_thread(self, kind: str, path: str) -> None:
+        """Worker thread: mount the image, post the outcome as a job."""
+        try:
+            if kind == "floppy":
+                vhd_path, letter = mount_floppy(path)
+            else:
+                vhd_path, letter = None, mount_iso(path)
+            self.jobs.put(("mounted", kind, path, vhd_path, letter))
+        except Exception as e:  # noqa: BLE001 - report anything to the log
+            self.jobs.put(("mount_error", e))
 
     def _show_listing(self, path: str) -> None:
         """Clear the log and print the image listing (or the error)."""
@@ -666,6 +959,7 @@ def main(argv: list[str] | None = None) -> int:
         _report(frozen, False, lang.t("usage_title"), str(e))
         return 2
     if action == "gui":
+        cleanup_temp_files()
         App(preselect=payload).mainloop()  # type: ignore[arg-type]
         return 0
 

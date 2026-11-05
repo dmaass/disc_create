@@ -1,5 +1,6 @@
 """Tests for ui.py logic (no display needed; widgets are not tested)."""
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -283,6 +284,250 @@ class TestUiLogic(unittest.TestCase):
                     app._browse_source()
                 self.assertEqual(app.source_var.get(), src2)
                 self.assertTrue(app.output_var.get().endswith("two.img"))
+        finally:
+            app.destroy()
+
+    def test_mount_target(self):
+        self.assertEqual(ui.mount_target("d.iso"), "iso")
+        self.assertEqual(ui.mount_target("D.ISO"), "iso")
+        self.assertEqual(ui.mount_target("d.img"), "floppy")
+        self.assertEqual(ui.mount_target("d.txt"), "error")
+        self.assertEqual(ui.mount_target("noext"), "error")
+
+    def test_mount_iso_mocked(self):
+        from unittest import mock
+        runs = [mock.Mock(stdout="True\n"), mock.Mock(stdout="E\n")]
+        with mock.patch.object(ui.os, "startfile", create=True) as sf, \
+                mock.patch.object(ui.subprocess, "run",
+                                  side_effect=runs):
+            self.assertEqual(ui.mount_iso("x.iso"), "E:")
+            sf.assert_called_once_with("x.iso")
+        with mock.patch.object(ui.os, "startfile", create=True), \
+                mock.patch.object(ui.subprocess, "run",
+                                  return_value=mock.Mock(stdout="\n")), \
+                mock.patch.object(ui.time, "sleep"):
+            with self.assertRaises(OSError):
+                ui.mount_iso("x.iso")
+            self.assertIsNone(ui._mounted_letter("x.iso", tries=2,
+                                                 delay=0))
+
+    def test_elevated_args_quoting(self):
+        args = ui._elevated_args("Do-Thing -Path 'a b''c'",
+                                 "C:\\t\\r e s.txt")
+        self.assertIn("-ExecutionPolicy Bypass", args)
+        self.assertIn("Do-Thing -Path 'a b''c'", args)
+        self.assertIn("Out-File -FilePath 'C:\\t\\r e s.txt'", args)
+        # Only the outer -Command "..." pair: inner double quotes
+        # would break parsing and hang waiting for the result file.
+        self.assertEqual(args.count('"'), 2)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows only")
+    def test_elevated_args_execute_probe(self):
+        import shutil
+        import subprocess
+        if shutil.which("powershell") is None:
+            raise unittest.SkipTest("no powershell")
+        with tempfile.TemporaryDirectory() as tmp:
+            res = os.path.join(tmp, "res.txt")
+            open(res, "w").close()
+            args = ui._elevated_args("'OK:' + 'probe-42'", res)
+            subprocess.run("powershell.exe " + args, timeout=60)
+            with open(res, encoding="utf-8-sig") as f:
+                self.assertEqual(ui._parse_elevated_result(f.read()),
+                                 (True, "probe-42"))
+            # ...while inner double quotes really do break the call.
+            res2 = os.path.join(tmp, "res2.txt")
+            open(res2, "w").close()
+            bad = ('-NoProfile -ExecutionPolicy Bypass -Command '
+                   '"try { \'OK:\' + "x" } catch { } | Out-File '
+                   f"-FilePath '{res2}' -Encoding utf8 -NoNewline\"")
+            subprocess.run("powershell.exe " + bad, timeout=60)
+            with open(res2, encoding="utf-8-sig") as f:
+                self.assertNotEqual(
+                    ui._parse_elevated_result(f.read()), (True, "x"))
+
+    def test_parse_elevated_result(self):
+        self.assertEqual(ui._parse_elevated_result("OK:E"), (True, "E"))
+        self.assertEqual(ui._parse_elevated_result("OK:\n"), (True, ""))
+        self.assertEqual(ui._parse_elevated_result("ERR:denied"),
+                         (False, "denied"))
+        self.assertEqual(ui._parse_elevated_result("garbage")[0], False)
+        self.assertEqual(ui._parse_elevated_result("")[0], False)
+        # Cmdlet chatter above the marker must not confuse the parser.
+        blob = ("Attached : True\nBlockSize : 0\nSize : 1511424\nOK:F\n")
+        self.assertEqual(ui._parse_elevated_result(blob), (True, "F"))
+        blob = "OK:F\nSome-Object : 1\nERR:late failure\n"
+        self.assertEqual(ui._parse_elevated_result(blob),
+                         (False, "late failure"))
+
+    def test_mount_floppy_mocked(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            img = os.path.join(tmp, "d.img")
+            with open(img, "wb") as f:
+                f.write(b"\0" * 1474560)
+            with mock.patch.object(ui, "_run_elevated",
+                                   return_value=(True, "F")) as run:
+                vhd_path, letter = ui.mount_floppy(img)
+            try:
+                self.assertEqual(letter, "F:")
+                self.assertTrue(vhd_path.endswith(".vhd"))
+                self.assertEqual(os.path.getsize(vhd_path),
+                                 82 * 2 * 18 * 512 + 512)
+            finally:
+                os.unlink(vhd_path)
+            self.assertIn("Mount-DiskImage", run.call_args[0][0])
+            with mock.patch.object(ui, "_run_elevated",
+                                   return_value=(False, "denied")):
+                with self.assertRaises(OSError):
+                    ui.mount_floppy(img)
+
+    def test_mount_floppy_bad_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            img = os.path.join(tmp, "d.img")
+            with open(img, "wb") as f:
+                f.write(b"small")
+            with self.assertRaises(ValueError):
+                ui.mount_floppy(img)
+
+    def test_mount_thread_posts_result(self):
+        from unittest import mock
+        try:
+            app = ui.App()
+        except Exception as e:
+            raise unittest.SkipTest(f"no display: {e}")
+        try:
+            app.withdraw()
+            with mock.patch.object(ui, "mount_iso", return_value="E:"):
+                app._mount_thread("iso", "x.iso")
+            self.assertEqual(app.jobs.get_nowait(),
+                             ("mounted", "iso", "x.iso", None, "E:"))
+            with mock.patch.object(ui, "mount_iso",
+                                   side_effect=OSError("nope")):
+                app._mount_thread("iso", "x.iso")
+            kind, err = app.jobs.get_nowait()
+            self.assertEqual(kind, "mount_error")
+            self.assertIsInstance(err, OSError)
+            app._finish_job(("mounted", "iso", "x.iso", None, "E:"))
+            content = app.log.get("1.0", "end")
+            self.assertIn("E:", content)
+            self.assertIn("x.iso", content)
+            with mock.patch.object(ui.messagebox,
+                                   "showerror") as errbox:
+                app._finish_job(("mount_error", OSError("plain-msg")))
+            text = errbox.call_args[0][1]
+            self.assertIn("plain-msg", text)
+            self.assertNotIn("OSError", text)
+            with mock.patch.object(ui.os, "startfile",
+                                   create=True) as sf:
+                app._finish_job(("mounted", "iso", "y.iso", None, "G:"))
+                sf.assert_called_once_with("G:\\")
+                app._finish_job(("mounted", "iso", "z.iso", None, None))
+                sf.assert_called_once()  # no letter: no Explorer
+        finally:
+            app.destroy()
+
+    def test_mount_floppy_letter_script(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            img = os.path.join(tmp, "d.img")
+            with open(img, "wb") as f:
+                f.write(b"\0" * 1474560)
+            with mock.patch.object(ui.vhd, "wrap_raw_floppy") as wrap, \
+                    mock.patch.object(ui, "_run_elevated",
+                                      return_value=(True, "E")) as elev:
+                vhd_path, letter = ui.mount_floppy(img)
+            try:
+                self.assertEqual(letter, "E:")
+                wrap.assert_called_once_with(img, vhd_path)
+                cmd = elev.call_args[0][0]
+                self.assertIn("Mount-DiskImage", cmd)
+                self.assertIn("Set-Disk", cmd)
+                self.assertIn("NewDriveLetter", cmd)
+                self.assertIn("Get-Partition", cmd)
+                self.assertNotIn('"', cmd)  # breaks elevated wrapping
+            finally:
+                with contextlib.suppress(OSError):
+                    os.unlink(vhd_path)
+
+    def test_cleanup_temp_files(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            names = ["other.txt", "disc_create_abc.vhd",
+                     "disc_create_el_xyz", "disc_create_notes.txt"]
+            for name in names:
+                with open(os.path.join(tmp, name), "w") as f:
+                    f.write("x")
+            with mock.patch.object(ui.tempfile, "gettempdir",
+                                   return_value=tmp):
+                removed = ui.cleanup_temp_files()
+            self.assertEqual(removed, 2)
+            left = sorted(os.listdir(tmp))
+            self.assertEqual(left, ["disc_create_notes.txt", "other.txt"])
+            # Locked files (still attached) are silently skipped.
+            with open(os.path.join(tmp, "disc_create_abc.vhd"),
+                      "w") as f:
+                f.write("x")
+            with mock.patch.object(ui.tempfile, "gettempdir",
+                                   return_value=tmp), \
+                    mock.patch.object(ui.os, "unlink",
+                                      side_effect=OSError("locked")):
+                self.assertEqual(ui.cleanup_temp_files(), 0)
+
+    def test_on_mount_floppy(self):
+        from unittest import mock
+
+        class SyncThread:
+            def __init__(self, target, args=(), daemon=None):
+                self._target = target
+                self._args = args
+
+            def start(self):
+                self._target(*self._args)
+
+            def is_alive(self):
+                return False
+
+        try:
+            app = ui.App()
+        except Exception as e:
+            raise unittest.SkipTest(f"no display: {e}")
+        try:
+            app.withdraw()
+            with tempfile.TemporaryDirectory() as tmp:
+                img = os.path.join(tmp, "d.img")
+                with open(img, "wb") as f:
+                    f.write(b"x")
+                fake_vhd = os.path.join(tmp, "d.vhd")
+                with mock.patch.object(ui.filedialog, "askopenfilename",
+                                       return_value=img), \
+                        mock.patch.object(ui, "mount_floppy",
+                                          return_value=(fake_vhd, "E:")), \
+                        mock.patch.object(ui.threading, "Thread",
+                                          SyncThread):
+                    app._on_mount()
+                app._poll_jobs()
+                content = app.log.get("1.0", "end")
+                self.assertIn(img, content)
+                self.assertIn("E:", content)
+        finally:
+            app.destroy()
+
+    def test_on_mount_needs_windows(self):
+        from unittest import mock
+        try:
+            app = ui.App()
+        except Exception as e:
+            raise unittest.SkipTest(f"no display: {e}")
+        try:
+            app.withdraw()
+            with mock.patch.object(ui.sys, "platform", "linux"), \
+                    mock.patch.object(ui.messagebox, "showinfo") as info, \
+                    mock.patch.object(ui.filedialog,
+                                      "askopenfilename") as dlg:
+                app._on_mount()
+            info.assert_called_once()
+            dlg.assert_not_called()
         finally:
             app.destroy()
 
